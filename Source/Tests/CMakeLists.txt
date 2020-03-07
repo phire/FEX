@@ -3,6 +3,10 @@ set(NAME ELFLoader)
 set(SRCS ELFLoader.cpp)
 
 add_executable(${NAME} ${SRCS})
+
+set_property(TARGET ${NAME} PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_link_options(${NAME} PRIVATE "LINKER:--section-start=.bss=0xA000000,--section-start=.text=0xB000000,--section-start=.plt=0xC000000,--section-start=.interp=0xC100000")
+
 target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source/)
 target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/External/SonicUtils/)
 

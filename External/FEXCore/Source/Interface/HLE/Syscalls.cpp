@@ -565,6 +565,9 @@ uint64_t SyscallHandler::HandleSyscall(FEXCore::Core::InternalThreadState *Threa
   break;
   }
   case SYSCALL_MMAP: {
+    #if 1
+    Result = (uintptr_t) mmap((void*)Args->Argument[1], Args->Argument[2], Args->Argument[3], Args->Argument[4], Args->Argument[5], Args->Argument[6]);
+    #else
     int Flags = Args->Argument[4];
     int GuestFD = static_cast<int32_t>(Args->Argument[5]);
 
@@ -639,6 +642,7 @@ uint64_t SyscallHandler::HandleSyscall(FEXCore::Core::InternalThreadState *Threa
       LastMMAP += Size;
       Result = Base;
     }
+    #endif
   break;
   }
   case SYSCALL_MPROTECT: {
@@ -1426,6 +1430,26 @@ uint64_t SyscallHandler::HandleSyscall(FEXCore::Core::InternalThreadState *Threa
   case SYSCALL_MUNMAP:
     Result = 0;
   break;
+  case SYSCALL_EXCVE: {
+    std::vector<const char*> args_virt = { "-U", "--accurate-std", "-c", "irint", "-n", "500", "--", "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2", "/usr/bin/clang++", "/home/skmp/projects/FEX/build/hw.cpp" };
+
+    //path to loaded elf
+    args_virt.push_back((const char*)Args->Argument[1]);
+
+    printf("[DEBUG] EXECVE: %s", (const char*)Args->Argument[1]);
+    const char** args_native = (const char**)Args->Argument[2];
+
+    while (*args_native) {
+      puts(*args_native);
+      args_virt.push_back(*args_native++);
+    }
+
+    puts("\n");
+    
+    Result = execve("/home/skmp/projects/FEX/build/Bin/ELFLoader", (char**)args_virt.at(0), (char**)Args->Argument[3]);
+  }
+    break;
+
   default:
     Result = -1;
     LogMan::Msg::A("Unknown syscall: %d", Args->Argument[0]);

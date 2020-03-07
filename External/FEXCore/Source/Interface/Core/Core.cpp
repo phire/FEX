@@ -473,6 +473,9 @@ namespace FEXCore::Context {
   }
 
   uintptr_t Context::CompileBlock(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
+    static std::mutex io_mutex;
+    std::lock_guard<std::mutex> lk(io_mutex);
+
     void *CodePtr {nullptr};
     uint8_t const *GuestCode{};
     if (Thread->CTX->Config.UnifiedMemory) {

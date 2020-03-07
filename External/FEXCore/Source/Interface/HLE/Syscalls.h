@@ -60,6 +60,7 @@ enum Syscalls {
   SYSCALL_SETSOCKOPT      = 54,  ///< __NR_setsockopt
   SYSCALL_GETSOCKOPT      = 55,  ///< __NR_getsockopt
   SYSCALL_CLONE           = 56,  ///< __NR_clone
+  SYSCALL_EXCVE           = 59,  ///< __NR_execve
   SYSCALL_EXIT            = 60,  ///< __NR_exit
   SYSCALL_WAIT4           = 61,  ///< __NR_wait4
   SYSCALL_UNAME           = 63,  ///< __NR_uname
