@@ -293,6 +293,8 @@ public:
   void FST(OpcodeArgs);
 
   void FADD(OpcodeArgs);
+  void FMUL(OpcodeArgs);
+
   void FXSaveOp(OpcodeArgs);
   void FXRStoreOp(OpcodeArgs);
 
