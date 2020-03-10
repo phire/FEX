@@ -4249,6 +4249,34 @@ void OpDispatchBuilder::PAlignrOp(OpcodeArgs) {
   StoreResult(FPRClass, Op, Res, -1);
 }
 
+template<size_t ElementSize>
+void OpDispatchBuilder::UCOMISxOp(OpcodeArgs) {
+  OrderedNode *Src1 = LoadSource(FPRClass, Op, Op->Dest, Op->Flags, -1);
+  OrderedNode *Src2 = LoadSource(FPRClass, Op, Op->Src[0], Op->Flags, -1);
+  OrderedNode *Res = _FCmp(Src1, Src2, ElementSize,
+    (1 << HOST_FLAG_CARRY) |
+    (1 << HOST_FLAG_PARITY) |
+    (1 << HOST_FLAG_ZERO));
+
+  auto HostFlag_CF = _GetHostFlag(Res, HOST_FLAG_CARRY);
+  auto HostFlag_ZF = _GetHostFlag(Res, HOST_FLAG_ZERO);
+  auto HostFlag_PF = _GetHostFlag(Res, HOST_FLAG_PARITY);
+
+  SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(HostFlag_CF);
+  SetRFLAG<FEXCore::X86State::RFLAG_ZF_LOC>(HostFlag_ZF);
+
+  auto ZeroConst = _Constant(0);
+  if (0) {
+    SetRFLAG<FEXCore::X86State::RFLAG_PF_LOC>(ZeroConst);
+  }
+  else {
+    SetRFLAG<FEXCore::X86State::RFLAG_PF_LOC>(HostFlag_PF);
+  }
+  SetRFLAG<FEXCore::X86State::RFLAG_AF_LOC>(ZeroConst);
+  SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(ZeroConst);
+  SetRFLAG<FEXCore::X86State::RFLAG_OF_LOC>(ZeroConst);
+}
+
 void OpDispatchBuilder::LDMXCSR(OpcodeArgs) {
 }
 
@@ -4487,6 +4515,7 @@ void InstallOpcodeHandlers() {
     {0x16, 1, &OpDispatchBuilder::MOVLHPSOp},
     {0x17, 1, &OpDispatchBuilder::MOVUPSOp},
     {0x28, 2, &OpDispatchBuilder::MOVUPSOp},
+    {0x2E, 2, &OpDispatchBuilder::UCOMISxOp<4>},
     {0x50, 1, &OpDispatchBuilder::MOVMSKOp<4>},
     {0x54, 1, &OpDispatchBuilder::VectorALUOp<IR::OP_VAND, 16>},
     {0x55, 1, &OpDispatchBuilder::ANDNOp},
@@ -4668,6 +4697,7 @@ void InstallOpcodeHandlers() {
     {0x16, 2, &OpDispatchBuilder::MOVHPDOp},
     {0x19, 7, &OpDispatchBuilder::NOPOp},
     {0x28, 2, &OpDispatchBuilder::MOVAPSOp},
+    {0x2E, 2, &OpDispatchBuilder::UCOMISxOp<8>},
 
     {0x40, 16, &OpDispatchBuilder::CMOVOp},
     {0x50, 1, &OpDispatchBuilder::MOVMSKOp<8>},

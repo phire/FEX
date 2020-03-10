@@ -15,7 +15,14 @@
     "constexpr static uint8_t COND_SGT  = 12",
     "constexpr static uint8_t COND_SLE  = 13",
     "static constexpr FEXCore::IR::RegisterClassType GPRClass {0}",
-    "static constexpr FEXCore::IR::RegisterClassType FPRClass {1}"
+    "static constexpr FEXCore::IR::RegisterClassType FPRClass {1}",
+
+    "constexpr static uint8_t HOST_FLAG_NEGATIVE  = 0",
+    "constexpr static uint8_t HOST_FLAG_ZERO      = 1",
+    "constexpr static uint8_t HOST_FLAG_CARRY     = 2",
+    "constexpr static uint8_t HOST_FLAG_OVERFLOW  = 3",
+    "constexpr static uint8_t HOST_FLAG_UNORDERED = 4",
+    "constexpr static uint8_t HOST_FLAG_PARITY    = 5"
   ],
 
   "Ops": {
@@ -1202,6 +1209,31 @@
       "Args": [
         "uint8_t", "RegisterSize",
         "uint8_t", "ElementSize"
+      ]
+    },
+
+    "GetHostFlag": {
+      "HasDest": true,
+      "SSAArgs": "1",
+      "Args": [
+        "uint8_t", "Flag"
+      ]
+    },
+
+    "CreatesFlags": {
+      "HasDest": true,
+      "SSAArgs": "1",
+      "Args": [
+        "uint32_t", "Flags"
+      ]
+    },
+
+    "FCmp": {
+      "HasDest": true,
+      "SSAArgs": "2",
+      "Args": [
+        "uint8_t", "ElementSize",
+        "uint32_t", "Flags"
       ]
     },
 

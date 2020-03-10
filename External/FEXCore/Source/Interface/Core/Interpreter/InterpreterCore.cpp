@@ -3077,6 +3077,56 @@ void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
             }
             break;
           }
+          case IR::OP_FCMP: {
+            auto Op = IROp->C<IR::IROp_FCmp>();
+            uint32_t ResultFlags{};
+            if (Op->ElementSize == 4) {
+              float Src1 = *GetSrc<float*>(Op->Header.Args[0]);
+              float Src2 = *GetSrc<float*>(Op->Header.Args[1]);
+              if (Op->Flags & (1 << HOST_FLAG_CARRY)) {
+                if (Src1 < Src2) {
+                  ResultFlags |= (1 << HOST_FLAG_CARRY);
+                }
+              }
+              if (Op->Flags & (1 << HOST_FLAG_PARITY)) {
+                if (std::isnan(Src1) || std::isnan(Src2)) {
+                  ResultFlags |= (1 << HOST_FLAG_PARITY);
+                }
+              }
+              if (Op->Flags & (1 << HOST_FLAG_ZERO)) {
+                if (Src1 == Src2) {
+                  ResultFlags |= (1 << HOST_FLAG_ZERO);
+                }
+              }
+            }
+            else {
+              double Src1 = *GetSrc<double*>(Op->Header.Args[0]);
+              double Src2 = *GetSrc<double*>(Op->Header.Args[1]);
+              if (Op->Flags & (1 << HOST_FLAG_CARRY)) {
+                if (Src1 < Src2) {
+                  ResultFlags |= (1 << HOST_FLAG_CARRY);
+                }
+              }
+              if (Op->Flags & (1 << HOST_FLAG_PARITY)) {
+                if (std::isnan(Src1) || std::isnan(Src2)) {
+                  ResultFlags |= (1 << HOST_FLAG_PARITY);
+                }
+              }
+              if (Op->Flags & (1 << HOST_FLAG_ZERO)) {
+                if (Src1 == Src2) {
+                  ResultFlags |= (1 << HOST_FLAG_ZERO);
+                }
+              }
+            }
+
+            GD = ResultFlags;
+            break;
+          }
+          case IR::OP_GETHOSTFLAG: {
+            auto Op = IROp->C<IR::IROp_GetHostFlag>();
+            GD = (*GetSrc<uint64_t*>(Op->Header.Args[0]) >> Op->Flag) & 1;
+            break;
+          }
           #define DO_SCALAR_COMPARE_OP(size, type, type2, func)              \
             case size: {                                      \
             auto *Dst_d  = reinterpret_cast<type2*>(Tmp);  \
