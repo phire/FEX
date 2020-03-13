@@ -5084,6 +5084,45 @@ void OpDispatchBuilder::FLD(OpcodeArgs) {
   //_StoreContext(converted, 16, offsetof(FEXCore::Core::CPUState, mm[7][0]));
 }
 
+template<size_t width>
+void OpDispatchBuilder::FILD(OpcodeArgs) {
+  // Update TOP
+  auto orig_top = GetX87Top();
+  auto top = _And(_Sub(orig_top, _Constant(1)), _Constant(7));
+  SetX87Top(top);
+
+  size_t read_width = width / 8;
+
+  // Read from memory
+  auto data = LoadSource_WithOpSize(GPRClass, Op, Op->Src[0], read_width, Op->Flags, -1);
+
+  auto zero = _Constant(0);
+
+  // Sign extend to 64bits
+  if (width != 64)
+    data = _Sext(width, data);
+
+  // Extract sign and make interger absolute
+  auto sign = _Select(COND_SLT, data, zero, _Constant(0x8000), zero);
+  auto absolute =  _Select(COND_SLT, data, zero, _Sub(zero, data), data);
+
+  // left justify the absolute interger
+  auto shift = _Sub(_Constant(63), _FindMSB(absolute));
+  auto shifted = _Lshl(absolute, shift);
+
+  auto adjusted_exponent = _Sub(_Constant(0x3fff + 63), shift);
+  auto zeroed_exponent = _Select(COND_EQ, absolute, zero, zero, adjusted_exponent);
+  auto upper = _Or(sign, zeroed_exponent);
+
+
+  OrderedNode *converted = _VCastFromGPR(16, 8, shifted);
+  converted = _VInsElement(16, 8, 1, 0, converted, _VCastFromGPR(16, 8, upper));
+
+  // Write to ST[TOP]
+  _StoreContextIndexed(converted, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+}
+
+
 template<size_t width, bool pop>
 void OpDispatchBuilder::FST(OpcodeArgs) {
   auto orig_top = GetX87Top();
@@ -6312,9 +6351,21 @@ constexpr uint16_t PF_F2 = 3;
     {OPDReg(0xD9, 7) | 0x40, 8, &OpDispatchBuilder::NOPOp}, // XXX: stubbed FNSTCW
     {OPDReg(0xD9, 7) | 0x80, 8, &OpDispatchBuilder::NOPOp}, // XXX: stubbed FNSTCW
 
+    {OPDReg(0xDB, 0) | 0x00, 8, &OpDispatchBuilder::FILD<32>},
+    {OPDReg(0xDB, 0) | 0x40, 8, &OpDispatchBuilder::FILD<32>},
+    {OPDReg(0xDB, 0) | 0x80, 8, &OpDispatchBuilder::FILD<32>},
+
     {OPDReg(0xDB, 7) | 0x00, 8, &OpDispatchBuilder::FST<80, true>},
     {OPDReg(0xDB, 7) | 0x40, 8, &OpDispatchBuilder::FST<80, true>},
     {OPDReg(0xDB, 7) | 0x80, 8, &OpDispatchBuilder::FST<80, true>},
+
+    {OPDReg(0xDF, 0) | 0x00, 8, &OpDispatchBuilder::FILD<16>},
+    {OPDReg(0xDF, 0) | 0x40, 8, &OpDispatchBuilder::FILD<16>},
+    {OPDReg(0xDF, 0) | 0x80, 8, &OpDispatchBuilder::FILD<16>},
+
+    {OPDReg(0xDF, 5) | 0x00, 8, &OpDispatchBuilder::FILD<64>},
+    {OPDReg(0xDF, 5) | 0x40, 8, &OpDispatchBuilder::FILD<64>},
+    {OPDReg(0xDF, 5) | 0x80, 8, &OpDispatchBuilder::FILD<64>},
 
     {OPDReg(0xDD, 0) | 0x00, 8, &OpDispatchBuilder::FLD<64>},
     {OPDReg(0xDD, 0) | 0x40, 8, &OpDispatchBuilder::FLD<64>},
