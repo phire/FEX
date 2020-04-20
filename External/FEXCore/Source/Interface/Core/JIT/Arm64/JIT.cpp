@@ -432,7 +432,7 @@ void JITCore::LoadConstant(vixl::aarch64::Register Reg, uint64_t Constant) {
 }
 
 static uint32_t GetPhys(IR::RegisterAllocationPass *RAPass, uint32_t Node) {
-  uint64_t Reg = RAPass->GetNodeRegister(Node);
+  uint64_t Reg = RAPass->GetDestRegister(Node);
 
   if ((uint32_t)Reg != ~0U)
     return Reg;

@@ -453,7 +453,7 @@ namespace FEXCore::Context {
       Thread->IntBackend = Thread->CPUBackend;
       break;
     case FEXCore::Config::CONFIG_IRJIT:
-      Thread->PassManager->InsertRAPass(IR::CreateRegisterAllocationPass());
+      Thread->PassManager->InsertRAPass(IR::CreateNewRAPass());
       // Initialization order matters here, the IR JIT may want to have the interpreter created first to get a pointer to its execution function
       // This is useful for JIT to interpreter fallback support
       Thread->IntBackend.reset(FEXCore::CPU::CreateInterpreterCore(this));
@@ -494,7 +494,7 @@ namespace FEXCore::Context {
     Thread->BlockCache->ClearCache();
     Thread->CPUBackend->ClearCache();
     Thread->IntBackend->ClearCache();
-  
+
     if (GuestRIP != 0) {
       auto IR = Thread->IRLists.find(GuestRIP)->second.release();
       Thread->IRLists.clear();
