@@ -11,7 +11,7 @@ namespace {
     public:
       ConstraintRAPass();
       ~ConstraintRAPass();
-      bool Run(FEXCore::IR::OpDispatchBuilder *Disp) override;
+      bool Run(FEXCore::IR::IREmitter *IREmit) override;
 
       void AllocateRegisterSet(uint32_t RegisterCount, uint32_t ClassCount) override;
       void AddRegisters(FEXCore::IR::RegisterClassType Class, uint32_t RegisterCount) override;
@@ -25,6 +25,7 @@ namespace {
       uint64_t GetDestRegister(uint32_t Node) override;
       uint64_t GetTemp(uint32_t Node, uint8_t Index) override;
       uint64_t GetPhysicalTemp(uint32_t Node, uint8_t Index) override;
+      void GetInterferenceRegsAtNode(uint32_t Node, std::vector<uint64_t> *Regs) override;
 
     private:
       std::vector<uint32_t> PhysicalRegisterCount;
@@ -80,6 +81,17 @@ namespace {
   uint64_t ConstraintRAPass::GetPhysicalTemp(uint32_t Node, uint8_t Index) {
     auto GraphNode = &Graph->Nodes[Node];
     return Graph->Nodes[GraphNode->Head.PhysicalsBase + Index].Head.RegAndClass;
+  }
+
+  void ConstraintRAPass::GetInterferenceRegsAtNode(uint32_t Node, std::vector<uint64_t> *Regs) {
+    auto GraphNode = &Graph->Nodes[Node];
+
+    Regs->reserve(GraphNode->Head.InterferenceCount);
+    Regs->clear();
+    for (uint32_t i = 0; i < GraphNode->Head.InterferenceCount; ++i) {
+      RegisterNode *InterferenceNode = &Graph->Nodes[GraphNode->InterferenceList[i]];
+      Regs->emplace_back(InterferenceNode->Head.RegAndClass);
+    }
   }
 
   void ConstraintRAPass::AllocateVirtualRegisters(FEXCore::IR::IRListView<false> *IR) {
@@ -225,14 +237,28 @@ namespace {
     }
   }
 
-  bool ConstraintRAPass::Run(FEXCore::IR::OpDispatchBuilder *Disp) {
+  bool ConstraintRAPass::Run(FEXCore::IR::IREmitter *IREmit) {
     bool Changed = false;
 
-    // We need to rerun compaction every step
-    Changed |= LocalCompaction->Run(Disp);
-
-    auto IR = Disp->ViewIR();
+    auto IR = IREmit->ViewIR();
     uint32_t SSACount = IR.GetSSACount();
+
+    uintptr_t ListBegin = IR.GetListData();
+    uintptr_t DataBegin = IR.GetData();
+
+    auto Begin = IR.begin();
+    auto Op = Begin();
+
+    FEXCore::IR::OrderedNode *RealNode = Op->GetNode(ListBegin);
+    auto HeaderOp = RealNode->Op(DataBegin)->CW<FEXCore::IR::IROp_IRHeader>();
+    LogMan::Throw::A(HeaderOp->Header.Op == FEXCore::IR::OP_IRHEADER, "First op wasn't IRHeader");
+
+    if (HeaderOp->ShouldInterpret) {
+      return false;
+    }
+
+    // We need to rerun compaction every step
+    Changed |= LocalCompaction->Run(IREmit);
 
     TopRAPressure.assign(TopRAPressure.size(), 0);
     ResetRegisterGraph(Graph, SSACount);
@@ -243,7 +269,6 @@ namespace {
     AllocateVirtualRegisters(&IR);
 
     HadFullRA = true;
-    Disp->ShouldDump = true;
 
     for (size_t i = 0; i < PhysicalRegisterCount.size(); ++i) {
       // Virtual registers fit completely within physical registers
@@ -253,7 +278,7 @@ namespace {
 
     if (!HadFullRA) {
       LogMan::Msg::D("Need to spill registers\n");
-      Disp->CTX->ShouldStop = true;
+      Manager->ShouldExit();
     }
 
     return Changed;

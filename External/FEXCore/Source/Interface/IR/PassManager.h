@@ -50,6 +50,10 @@ public:
     ExitHandler = Handler;
   }
 
+  void ShouldExit() {
+    ExitHandler();
+  }
+
   bool HasRAPass() const {
     return RAPass != nullptr;
   }
