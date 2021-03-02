@@ -38,7 +38,7 @@ static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::InternalT
   // Go to sleep
   Thread->StartRunning.Wait();
 
-  Thread->State.RunningEvents.Running = true;
+  Thread->RunningEvents.Running = true;
   ++ctx->IdleWaitRefCount;
   ctx->IdleWaitCV.notify_all();
 }
@@ -84,7 +84,7 @@ DispatchGenerator::DispatchGenerator(FEXCore::Context::Context *ctx, FEXCore::Co
 
   // Save this stack pointer so we can cleanly shutdown the emulation with a long jump
   // regardless of where we were in the stack
-  mov(qword [rdi + offsetof(FEXCore::Core::ThreadState, ReturningStackLocation)], rsp);
+  mov(qword [rdi + offsetof(FEXCore::Core::CpuStateFrame, ReturningStackLocation)], rsp);
 
   Label LoopTop;
   Label NoBlock;
@@ -120,7 +120,7 @@ DispatchGenerator::DispatchGenerator(FEXCore::Context::Context *ctx, FEXCore::Co
     mov(rcx, qword [rdi + rax + 8]);
     cmp(rcx, rdx);
     jne(NoBlock);
-    
+
     // Load the block pointer
     mov(rax, qword [rdi + rax]);
 
@@ -226,12 +226,12 @@ DispatchGenerator::DispatchGenerator(FEXCore::Context::Context *ctx, FEXCore::Co
 
     // Store the trampoline to the guest stack
     // Guest stack is now correctly misaligned after a regular call instruction
-    sub(qword [STATE + offsetof(FEXCore::Core::InternalThreadState, State.State.gregs[X86State::REG_RSP])], 16);
-    mov(rbx, qword [STATE + offsetof(FEXCore::Core::InternalThreadState, State.State.gregs[X86State::REG_RSP])]);
+    sub(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.gregs[X86State::REG_RSP])], 16);
+    mov(rbx, qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.gregs[X86State::REG_RSP])]);
     mov(qword [rbx], rax);
 
     // Store RIP to the context state
-    mov(qword [STATE + offsetof(FEXCore::Core::InternalThreadState, State.State.rip)], rsi);
+    mov(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.rip)], rsi);
 
     // Back to the loop top now
     jmp(LoopTop);
@@ -309,7 +309,7 @@ void DispatchGenerator::StoreThreadState(int Signal, void *ucontext) {
   // Save guest state
   // We can't guarantee if registers are in context or host GPRs
   // So we need to save everything
-  memcpy(&Context->GuestState, &State->State, sizeof(FEXCore::Core::CPUState));
+  memcpy(&Context->GuestState, State->CurrentFrame, sizeof(FEXCore::Core::CPUState));
 
   // Set the new SP
   _mcontext->gregs[REG_RSP] = NewSP;
@@ -332,7 +332,7 @@ void DispatchGenerator::RestoreThreadState(void *ucontext) {
   }
 
   // First thing, reset the guest state
-  memcpy(&State->State, &Context->GuestState, sizeof(FEXCore::Core::CPUState));
+  memcpy(State->CurrentFrame, &Context->GuestState, sizeof(FEXCore::Core::CPUState));
 
   // Now restore host state
 
@@ -357,7 +357,7 @@ bool DispatchGenerator::HandleGuestSignal(int Signal, void *info, void *ucontext
   // Set our state register to point to our guest thread data
   _mcontext->gregs[REG_R14] = reinterpret_cast<uint64_t>(State);
 
-  uint64_t OldGuestSP = State->State.State.gregs[X86State::REG_RSP];
+  uint64_t OldGuestSP = State->CurrentFrame->State.gregs[X86State::REG_RSP];
   uint64_t NewGuestSP = OldGuestSP;
 
   if (!(GuestStack->ss_flags & SS_DISABLE)) {
@@ -378,22 +378,22 @@ bool DispatchGenerator::HandleGuestSignal(int Signal, void *info, void *ucontext
   // Don't need this offset if we aren't going to be putting siginfo in to it
   NewGuestSP -= 128;
 
-  State->State.State.gregs[X86State::REG_RDI] = Signal;
+  State->CurrentFrame->State.gregs[X86State::REG_RDI] = Signal;
 
   if (GuestAction->sa_flags & SA_SIGINFO) {
     // XXX: siginfo_t(RSI), ucontext (RDX)
-    State->State.State.gregs[X86State::REG_RSI] = 0;
-    State->State.State.gregs[X86State::REG_RDX] = 0;
-    State->State.State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
+    State->CurrentFrame->State.gregs[X86State::REG_RSI] = 0;
+    State->CurrentFrame->State.gregs[X86State::REG_RDX] = 0;
+    State->CurrentFrame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
   }
   else {
-    State->State.State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.handler);
+    State->CurrentFrame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.handler);
   }
 
   // Set up the new SP for stack handling
   NewGuestSP -= 8;
   *(uint64_t*)NewGuestSP = CTX->X86CodeGen.SignalReturn;
-  State->State.State.gregs[X86State::REG_RSP] = NewGuestSP;
+  State->CurrentFrame->State.gregs[X86State::REG_RSP] = NewGuestSP;
 
   return true;
 }
@@ -425,7 +425,7 @@ bool DispatchGenerator::HandleSignalPause(int Signal, void *info, void *ucontext
     // Our thread is stopping
     // We don't care about anything at this point
     // Set the stack to our starting location when we entered the core and get out safely
-    _mcontext->gregs[REG_RSP] = State->State.ReturningStackLocation;
+    _mcontext->gregs[REG_RSP] = State->CurrentFrame->ReturningStackLocation;
 
     // Set the new PC
     _mcontext->gregs[REG_RIP] = ThreadStopHandlerAddress;

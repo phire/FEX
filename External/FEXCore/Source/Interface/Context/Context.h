@@ -112,7 +112,6 @@ namespace FEXCore::Context {
     std::unique_ptr<FEXCore::ThunkHandler> ThunkHandler;
 
     CustomCPUFactoryType CustomCPUFactory;
-    CustomCPUFactoryType FallbackCPUFactory;
     std::function<void(uint64_t ThreadId, FEXCore::Context::ExitReason)> CustomExitHandler;
 
     struct AOTIRCacheEntry {
@@ -180,7 +179,6 @@ namespace FEXCore::Context {
     // XXX:
     // bool FindIRForRIP(uint64_t RIP, FEXCore::IR::IntrusiveIRList **ir);
     // void SetIRForRIP(uint64_t RIP, FEXCore::IR::IntrusiveIRList *const ir);
-    FEXCore::Core::ThreadState *GetThreadState();
     void LoadEntryList();
 
     std::tuple<FEXCore::IR::IRListView *, FEXCore::IR::RegisterAllocationData *, uint64_t, uint64_t, uint64_t, uint64_t> GenerateIR(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP);

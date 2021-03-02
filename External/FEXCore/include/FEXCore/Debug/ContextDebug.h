@@ -25,7 +25,6 @@ namespace Debug {
 	// XXX:
   // bool FindIRForRIP(FEXCore::Context::Context *CTX, uint64_t RIP, FEXCore::IR::IntrusiveIRList **ir);
   // void SetIRForRIP(FEXCore::Context::Context *CTX, uint64_t RIP, FEXCore::IR::IntrusiveIRList *const ir);
-  FEXCore::Core::ThreadState *GetThreadState(FEXCore::Context::Context *CTX);
 }
 }
 

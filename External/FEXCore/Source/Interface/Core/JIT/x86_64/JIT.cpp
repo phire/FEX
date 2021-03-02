@@ -63,7 +63,7 @@ void X86JITCore::StoreThreadState(int Signal, void *ucontext) {
   // Save guest state
   // We can't guarantee if registers are in context or host GPRs
   // So we need to save everything
-  memcpy(&Context->GuestState, &ThreadState->State, sizeof(FEXCore::Core::CPUState));
+  memcpy(&Context->GuestState, ThreadState->CurrentFrame, sizeof(FEXCore::Core::CPUState));
 
   // Set the new SP
   ArchHelpers::Context::SetSp(ucontext, NewSP);
@@ -78,7 +78,7 @@ void X86JITCore::RestoreThreadState(void *ucontext) {
   X86ContextBackup *Context = reinterpret_cast<X86ContextBackup*>(NewSP);
 
   // First thing, reset the guest state
-  memcpy(&ThreadState->State, &Context->GuestState, sizeof(FEXCore::Core::CPUState));
+  memcpy(&ThreadState->CurrentFrame, &Context->GuestState, sizeof(FEXCore::Core::CPUState));
 
   // Now restore host state
   ArchHelpers::Context::RestoreContext(ucontext, Context);
@@ -100,7 +100,7 @@ bool X86JITCore::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
   // We use this to track if it is safe to clear cache
   ++SignalHandlerRefCounter;
 
-  uint64_t OldGuestSP = ThreadState->State.State.gregs[X86State::REG_RSP];
+  uint64_t OldGuestSP = ThreadState->CurrentFrame->State.gregs[X86State::REG_RSP];
   uint64_t NewGuestSP = OldGuestSP;
 
   if (!(GuestStack->ss_flags & SS_DISABLE)) {
@@ -136,7 +136,7 @@ bool X86JITCore::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       guest_uctx->uc_mcontext.fpregs = &guest_uctx->__fpregs_mem;
 
 #define COPY_REG(x) \
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_##x] = ThreadState->State.State.gregs[X86State::REG_##x];
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_##x] = ThreadState->CurrentFrame->State.gregs[X86State::REG_##x];
       COPY_REG(R8);
       COPY_REG(R9);
       COPY_REG(R10);
@@ -156,19 +156,19 @@ bool X86JITCore::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
 #undef COPY_REG
 
       // Copy float registers
-      memcpy(guest_uctx->__fpregs_mem._st, ThreadState->State.State.mm, sizeof(ThreadState->State.State.mm));
-      memcpy(guest_uctx->__fpregs_mem._xmm, ThreadState->State.State.xmm, sizeof(ThreadState->State.State.xmm));
+      memcpy(guest_uctx->__fpregs_mem._st, ThreadState->CurrentFrame->State.mm, sizeof(ThreadState->CurrentFrame->State.mm));
+      memcpy(guest_uctx->__fpregs_mem._xmm, ThreadState->CurrentFrame->State.xmm, sizeof(ThreadState->CurrentFrame->State.xmm));
 
       // FCW store default
-      guest_uctx->__fpregs_mem.fcw = ThreadState->State.State.FCW;
+      guest_uctx->__fpregs_mem.fcw = ThreadState->CurrentFrame->State.FCW;
 
       // Reconstruct FSW
       guest_uctx->__fpregs_mem.fsw =
-        (ThreadState->State.State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] << 11) |
-        (ThreadState->State.State.flags[FEXCore::X86State::X87FLAG_C0_LOC] << 8) |
-        (ThreadState->State.State.flags[FEXCore::X86State::X87FLAG_C1_LOC] << 9) |
-        (ThreadState->State.State.flags[FEXCore::X86State::X87FLAG_C2_LOC] << 10) |
-        (ThreadState->State.State.flags[FEXCore::X86State::X87FLAG_C3_LOC] << 14);
+        (ThreadState->CurrentFrame->State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] << 11) |
+        (ThreadState->CurrentFrame->State.flags[FEXCore::X86State::X87FLAG_C0_LOC] << 8) |
+        (ThreadState->CurrentFrame->State.flags[FEXCore::X86State::X87FLAG_C1_LOC] << 9) |
+        (ThreadState->CurrentFrame->State.flags[FEXCore::X86State::X87FLAG_C2_LOC] << 10) |
+        (ThreadState->CurrentFrame->State.flags[FEXCore::X86State::X87FLAG_C3_LOC] << 14);
 
       // Copy over signal stack information
       guest_uctx->uc_stack.ss_flags = GuestStack->ss_flags;
@@ -176,8 +176,8 @@ bool X86JITCore::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       guest_uctx->uc_stack.ss_size = GuestStack->ss_size;
 
       // XXX: siginfo_t(RSI)
-      ThreadState->State.State.gregs[X86State::REG_RSI] = 0x4142434445460000;
-      ThreadState->State.State.gregs[X86State::REG_RDX] = UContextLocation;
+      ThreadState->CurrentFrame->State.gregs[X86State::REG_RSI] = 0x4142434445460000;
+      ThreadState->CurrentFrame->State.gregs[X86State::REG_RDX] = UContextLocation;
     }
     else {
       // XXX: 32bit Support
@@ -192,25 +192,25 @@ bool X86JITCore::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       *(uint32_t*)NewGuestSP = SigInfoLocation;
     }
 
-    ThreadState->State.State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
+    ThreadState->CurrentFrame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
   }
   else {
-    ThreadState->State.State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.handler);
+    ThreadState->CurrentFrame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.handler);
   }
 
   if (CTX->Config.Is64BitMode) {
-    ThreadState->State.State.gregs[X86State::REG_RDI] = Signal;
+    ThreadState->CurrentFrame->State.gregs[X86State::REG_RDI] = Signal;
 
     // Set up the new SP for stack handling
     NewGuestSP -= 8;
     *(uint64_t*)NewGuestSP = CTX->X86CodeGen.SignalReturn;
-    ThreadState->State.State.gregs[X86State::REG_RSP] = NewGuestSP;
+    ThreadState->CurrentFrame->State.gregs[X86State::REG_RSP] = NewGuestSP;
   }
   else {
     NewGuestSP -= 4;
     *(uint32_t*)NewGuestSP = CTX->X86CodeGen.SignalReturn;
     LogMan::Throw::A(CTX->X86CodeGen.SignalReturn < 0x1'0000'0000ULL, "This needs to be below 4GB");
-    ThreadState->State.State.gregs[X86State::REG_RSP] = NewGuestSP;
+    ThreadState->CurrentFrame->State.gregs[X86State::REG_RSP] = NewGuestSP;
   }
 
   return true;
@@ -284,7 +284,7 @@ bool X86JITCore::HandleSignalPause(int Signal, void *info, void *ucontext) {
     // Our thread is stopping
     // We don't care about anything at this point
     // Set the stack to our starting location when we entered the JIT and get out safely
-    _mcontext->gregs[REG_RSP] = ThreadState->State.ReturningStackLocation;
+    _mcontext->gregs[REG_RSP] = ThreadState->CurrentFrame->ReturningStackLocation;
 
     // Our ref counting doesn't matter anymore
     SignalHandlerRefCounter = 0;
@@ -991,7 +991,7 @@ static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::InternalT
   // Go to sleep
   Thread->StartRunning.Wait();
 
-  Thread->State.RunningEvents.Running = true;
+  Thread->RunningEvents.Running = true;
   ++ctx->IdleWaitRefCount;
   ctx->IdleWaitCV.notify_all();
 }
@@ -1002,7 +1002,7 @@ uint64_t X86JITCore::ExitFunctionLink(X86JITCore *core, FEXCore::Core::InternalT
   auto HostCode = Thread->LookupCache->FindBlock(GuestRip);
 
   if (!HostCode) {
-    Thread->State.State.rip = GuestRip;
+    Thread->CurrentFrame->State.rip = GuestRip;
     return core->AbsoluteLoopTopAddress;
   }
 
@@ -1065,7 +1065,7 @@ void X86JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread
 
   // Save this stack pointer so we can cleanly shutdown the emulation with a long jump
   // regardless of where we were in the stack
-  mov(qword [STATE + offsetof(FEXCore::Core::ThreadState, ReturningStackLocation)], rsp);
+  mov(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, ReturningStackLocation)], rsp);
 
   Label LoopTop;
   Label FullLookup;
@@ -1238,12 +1238,12 @@ void X86JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread
 
     // Store the trampoline to the guest stack
     // Guest stack is now correctly misaligned after a regular call instruction
-    sub(qword [STATE + offsetof(FEXCore::Core::InternalThreadState, State.State.gregs[X86State::REG_RSP])], 16);
-    mov(rbx, qword [STATE + offsetof(FEXCore::Core::InternalThreadState, State.State.gregs[X86State::REG_RSP])]);
+    sub(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.gregs[X86State::REG_RSP])], 16);
+    mov(rbx, qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.gregs[X86State::REG_RSP])]);
     mov(qword [rbx], rax);
 
     // Store RIP to the context state
-    mov(qword [STATE + offsetof(FEXCore::Core::InternalThreadState, State.State.rip)], rsi);
+    mov(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.rip)], rsi);
 
     // Back to the loop top now
     jmp(LoopTop);
