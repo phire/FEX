@@ -337,7 +337,7 @@ namespace FEXCore::Context {
 
   void Context::HandleCallback(uint64_t RIP) {
     auto Thread = Core::ThreadData.Thread;
-    Thread->CPUBackend->CallbackPtr(Thread, RIP);
+    Thread->CPUBackend->CallbackPtr(Thread->CurrentFrame, RIP);
   }
 
   void Context::RegisterHostSignalHandler(int Signal, HostSignalDelegatorFunction Func) {
@@ -1032,7 +1032,8 @@ namespace FEXCore::Context {
   }
 
 
-  uintptr_t Context::CompileBlock(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
+  uintptr_t Context::CompileBlock(FEXCore::Core::CpuStateFrame *Frame, uint64_t GuestRIP) {
+    auto Thread = Frame->Thread;
 
     // Is the code in the cache?
     // The backends only check L1 and L2, not L3
@@ -1164,7 +1165,7 @@ namespace FEXCore::Context {
 
     Thread->RunningEvents.Running = true;
 
-    Thread->CPUBackend->ExecuteDispatch(Thread);
+    Thread->CPUBackend->ExecuteDispatch(Thread->CurrentFrame);
 
     Thread->RunningEvents.WaitingToStart = false;
     Thread->RunningEvents.Running = false;
@@ -1214,7 +1215,7 @@ namespace FEXCore::Context {
     RemoveCodeEntry(Thread, RIP);
 
     // We don't care if compilation passes or not
-    CompileBlock(Thread, RIP);
+    CompileBlock(Thread->CurrentFrame, RIP);
 
     Thread->CurrentFrame->State.rip = RIPBackup;
   }
@@ -1247,7 +1248,9 @@ namespace FEXCore::Context {
     return true;
   }
 
-  uint64_t HandleSyscall(FEXCore::HLE::SyscallHandler *Handler, FEXCore::Core::InternalThreadState *Thread, FEXCore::HLE::SyscallArguments *Args) {
+  uint64_t HandleSyscall(FEXCore::HLE::SyscallHandler *Handler, FEXCore::Core::CpuStateFrame *Frame, FEXCore::HLE::SyscallArguments *Args) {
+    auto Thread = Frame->Thread; // FIXME: Call HandleSyscall directly with frame
+
     uint64_t Result{};
     Result = Handler->HandleSyscall(Thread, Args);
     return Result;

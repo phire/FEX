@@ -1083,7 +1083,7 @@ void InterpreterOps::InterpretIR(FEXCore::Core::InternalThreadState *Thread, FEX
               Args.Argument[j] = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[j]);
             }
 
-            uint64_t Res = FEXCore::Context::HandleSyscall(Thread->CTX->SyscallHandler, Thread, &Args);
+            uint64_t Res = FEXCore::Context::HandleSyscall(Thread->CTX->SyscallHandler, Thread->CurrentFrame, &Args);
             GD = Res;
             break;
           }

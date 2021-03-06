@@ -78,7 +78,7 @@ void X86JITCore::RestoreThreadState(void *ucontext) {
   X86ContextBackup *Context = reinterpret_cast<X86ContextBackup*>(NewSP);
 
   // First thing, reset the guest state
-  memcpy(&ThreadState->CurrentFrame, &Context->GuestState, sizeof(FEXCore::Core::CPUState));
+  memcpy(ThreadState->CurrentFrame, &Context->GuestState, sizeof(FEXCore::Core::CPUState));
 
   // Now restore host state
   ArchHelpers::Context::RestoreContext(ucontext, Context);
@@ -834,7 +834,8 @@ void *X86JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR
     // If we have a gdb server running then run in a less efficient mode that checks if we need to exit
     // This happens when single stepping
     static_assert(sizeof(CTX->Config.RunningMode) == 4, "This is expected to be size of 4");
-    mov(rax, qword [STATE + (offsetof(FEXCore::Core::InternalThreadState, CTX))]);
+    mov(rax, qword [STATE + (offsetof(FEXCore::Core::CpuStateFrame, Thread))]); // Get Thread object
+    mov(rax, qword [rax + (offsetof(FEXCore::Core::InternalThreadState, CTX))]); // Get context object
 
     // If the value == 0 then branch to the top
     cmp(dword [rax + (offsetof(FEXCore::Context::Context, Config.RunningMode))], 0);
@@ -984,7 +985,9 @@ void *X86JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR
   return Entry;
 }
 
-static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadState *Thread) {
+static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::CpuStateFrame *Frame) {
+  auto Thread = Frame->Thread;
+
   --ctx->IdleWaitRefCount;
   ctx->IdleWaitCV.notify_all();
 
@@ -996,7 +999,8 @@ static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::InternalT
   ctx->IdleWaitCV.notify_all();
 }
 
-uint64_t X86JITCore::ExitFunctionLink(X86JITCore *core, FEXCore::Core::InternalThreadState *Thread, uint64_t *record) {
+uint64_t X86JITCore::ExitFunctionLink(X86JITCore *core, FEXCore::Core::CpuStateFrame *Frame, uint64_t *record) {
+  auto Thread = Frame->Thread;
   auto GuestRip = record[1];
 
   auto HostCode = Thread->LookupCache->FindBlock(GuestRip);
@@ -1163,7 +1167,7 @@ void X86JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread
   {
     L(NoBlock);
 
-    using ClassPtrType = uintptr_t (FEXCore::Context::Context::*)(FEXCore::Core::InternalThreadState *, uint64_t);
+    using ClassPtrType = uintptr_t (FEXCore::Context::Context::*)(FEXCore::Core::CpuStateFrame *, uint64_t);
     union PtrCast {
       ClassPtrType ClassPtr;
       uintptr_t Data;

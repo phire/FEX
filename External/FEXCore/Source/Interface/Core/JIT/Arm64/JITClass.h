@@ -99,7 +99,7 @@ public:
 private:
   Label *PendingTargetLabel;
   FEXCore::Context::Context *CTX;
-  FEXCore::Core::InternalThreadState *State;
+  FEXCore::Core::InternalThreadState *ThreadState;
   FEXCore::IR::IRListView const *IR;
 
   std::map<IR::OrderedNodeWrapper::NodeOffsetType, aarch64::Label> JumpTargets;

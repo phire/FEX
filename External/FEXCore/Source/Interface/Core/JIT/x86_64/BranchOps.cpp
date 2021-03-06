@@ -286,7 +286,7 @@ DEF_OP(RemoveCodeEntry) {
   mov(rsi, rax);
 
 
-  mov(rax, reinterpret_cast<uintptr_t>(&Context::Context::RemoveCodeEntry));
+  mov(rax, reinterpret_cast<uintptr_t>(&Context::Context::RemoveCodeEntryFromJit));
   call(rax);
 
   if (NumPush & 1)

@@ -31,7 +31,9 @@ class DispatchGenerator : public Xbyak::CodeGenerator {
     std::stack<uint64_t> SignalFrames;
 };
 
-static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadState *Thread) {
+static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::CpuStateFrame *Frame) {
+  auto Thread = Frame->Thread;
+
   --ctx->IdleWaitRefCount;
   ctx->IdleWaitCV.notify_all();
 
@@ -169,7 +171,7 @@ DispatchGenerator::DispatchGenerator(FEXCore::Context::Context *ctx, FEXCore::Co
   {
     L(NoBlock);
 
-    using ClassPtrType = uintptr_t (FEXCore::Context::Context::*)(FEXCore::Core::InternalThreadState *, uint64_t);
+    using ClassPtrType = uintptr_t (FEXCore::Context::Context::*)(FEXCore::Core::CpuStateFrame *, uint64_t);
     union PtrCast {
       ClassPtrType ClassPtr;
       uintptr_t Data;
