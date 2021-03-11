@@ -33,10 +33,13 @@ function(generate NAME)
   set(GEN_${NAME} ${OUTPUTS} PARENT_SCOPE)
 endfunction()
 
-function(add_guest_lib NAME)
+set(LIBS )
+
+macro(add_guest_lib NAME)
     add_library(${NAME}-guest SHARED ../lib${NAME}/lib${NAME}_Guest.cpp ${GEN_lib${NAME}})
     target_include_directories(${NAME}-guest PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/gen/lib${NAME}" "${CMAKE_CURRENT_SOURCE_DIR}/../include")
-endfunction()
+    string(APPEND LIBS "${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}-guest.so ")
+endmacro()
 
 generate(libasound thunks function_packs function_packs_public)
 add_guest_lib(asound)
@@ -66,3 +69,7 @@ add_guest_lib(Xrender)
 
 generate(libXfixes thunks function_packs function_packs_public)
 add_guest_lib(Xfixes)
+
+file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/outputs")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/outputs" "${LIBS}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/outputs.d" "thunk-copy-guest.stamp: ${LIBS}${CMAKE_CURRENT_BINARY_DIR}/outputs\n")

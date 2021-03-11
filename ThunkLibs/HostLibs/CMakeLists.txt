@@ -26,10 +26,13 @@ function(generate NAME)
   set(GEN_${NAME} ${OUTPUTS} PARENT_SCOPE)
 endfunction()
 
-function(add_host_lib NAME)
+set(LIBS )
+
+macro(add_host_lib NAME)
     add_library(${NAME}-host SHARED ../lib${NAME}/lib${NAME}_Host.cpp ${GEN_lib${NAME}})
     target_include_directories(${NAME}-host PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/gen/lib${NAME}" "${CMAKE_CURRENT_SOURCE_DIR}/../include")
-endfunction()
+    string(APPEND LIBS "${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}-host.so ")
+endmacro()
 
 generate(libasound function_unpacks tab_function_unpacks ldr ldr_ptrs)
 add_host_lib(asound)
@@ -58,3 +61,6 @@ add_host_lib(Xrender)
 
 generate(libXfixes function_unpacks tab_function_unpacks ldr ldr_ptrs)
 add_host_lib(Xfixes)
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/outputs" "${LIBS}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/outputs.d" "thunk-copy-host.stamp: ${LIBS}")

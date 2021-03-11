@@ -254,4 +254,25 @@ if (BUILD_THUNKS)
     INSTALL_COMMAND ""
     BUILD_ALWAYS ON
   )
+
+  set(ThunkDestDir "${CMAKE_CURRENT_BINARY_DIR}/thunks-out")
+
+  file(MAKE_DIRECTORY "${ThunkDestDir}")
+  function(CopyThunks TYPE)
+    string(TOLOWER ${TYPE} TYPEL)
+    add_custom_command(OUTPUT "thunk-copy-${TYPEL}.stamp"
+      VERBATIM
+      COMMAND bash -c "rm -f ${ThunkDestDir}/*-${TYPEL}.so" # avoid stale files
+      COMMAND bash -c "cp `cat ${CMAKE_CURRENT_BINARY_DIR}/${TYPE}/outputs` ${ThunkDestDir}/"
+      COMMAND echo "Copied ${TYPE} Thunks"
+      COMMAND touch "thunk-copy-${TYPEL}.stamp"
+      DEPENDS "${TYPEL}-libs"
+      DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${TYPE}/outputs.d"
+    )
+  endfunction()
+  CopyThunks(Host)
+  CopyThunks(Guest)
+
+  add_custom_target(CopyThunks ALL DEPENDS thunk-copy-guest.stamp thunk-copy-host.stamp)
+
 endif()
