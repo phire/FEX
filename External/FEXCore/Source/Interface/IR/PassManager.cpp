@@ -9,8 +9,16 @@ namespace FEXCore::IR {
 void PassManager::AddDefaultPasses(bool InlineConstants, bool StaticRegisterAllocation) {
   FEX_CONFIG_OPT(DisablePasses, DEBUG_DISABLE_OPTIMIZATION_PASSES);
 
+  if (!DisablePasses) {
+    InsertPass(CreateReplaceX87());
+  }
+
+  InsertPass(CreateDumpIR("After Replacex87", false));
+
   // Not an optimisation pass, we always need to run it
   InsertPass(CreateLowerX87());
+
+//  InsertPass(CreateDumpIR("After Lowerx87", false));
 
   if (!DisablePasses()) {
     InsertPass(CreateContextLoadStoreElimination());
@@ -37,6 +45,8 @@ void PassManager::AddDefaultPasses(bool InlineConstants, bool StaticRegisterAllo
   // If the IR is compacted post-RA then the node indexing gets messed up and the backend isn't able to find the register assigned to a node
   // Compact before IR, don't worry about RA generating spills/fills
   InsertPass(CompactionPass);
+
+  InsertPass(CreateDumpIR("Before RA", false));
 }
 
 void PassManager::AddDefaultValidationPasses() {
@@ -50,6 +60,7 @@ void PassManager::AddDefaultValidationPasses() {
 void PassManager::InsertRegisterAllocationPass(bool OptimizeSRA) {
     RAPass = IR::CreateRegisterAllocationPass(CompactionPass, OptimizeSRA);
     InsertPass(RAPass);
+    InsertPass(CreateDumpIR("After RA", true));
 }
 
 bool PassManager::Run(IREmitter *IREmit) {

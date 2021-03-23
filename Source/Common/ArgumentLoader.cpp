@@ -93,6 +93,12 @@ namespace FEX::ArgLoader {
         .help("Does not calculate the parity flag on integer operations")
         .set_default(false);
 
+      CPUGroup.add_option("--unsafe-replace-x87")
+        .dest("UnsafeReplaceX87")
+        .action("store_true")
+        .help("Replaces x87 operations with regular 64bit doubles when possible")
+        .set_default(false);
+
       Parser.add_option_group(CPUGroup);
     }
     {
@@ -252,6 +258,10 @@ namespace FEX::ArgLoader {
       if (Options.is_set_by_user("AbiNoPF")) {
         bool AbiNoPF = Options.get("AbiNoPF");
         Set(FEXCore::Config::ConfigOption::CONFIG_ABI_NO_PF, std::to_string(AbiNoPF));
+      }
+      if (Options.is_set_by_user("UnsafeReplaceX87")) {
+        bool UnsafeReplaceX87 = Options.get("UnsafeReplaceX87");
+        Set(FEXCore::Config::ConfigOption::CONFIG_UNSAFE_REPLACE_X87, std::to_string(UnsafeReplaceX87));
       }
     }
 

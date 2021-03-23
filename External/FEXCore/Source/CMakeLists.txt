@@ -120,6 +120,7 @@ set (SRCS
   Interface/IR/Passes/StaticRegisterAllocationPass.cpp
   Interface/IR/Passes/RegisterAllocationPass.cpp
   Interface/IR/Passes/SyscallOptimization.cpp
+  Interface/IR/Passes/ReplaceX87.cpp
   Interface/IR/Passes/LowerX87.cpp
   Utils/ELFLoader.cpp
   Utils/ELFSymbolDatabase.cpp

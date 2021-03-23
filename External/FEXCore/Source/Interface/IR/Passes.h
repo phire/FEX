@@ -16,6 +16,7 @@ FEXCore::IR::Pass* CreatePassDeadCodeElimination();
 FEXCore::IR::Pass* CreateIRCompaction();
 FEXCore::IR::RegisterAllocationPass* CreateRegisterAllocationPass(FEXCore::IR::Pass* CompactionPass, bool OptimizeSRA);
 FEXCore::IR::Pass* CreateStaticRegisterAllocationPass();
+FEXCore::IR::Pass* CreateReplaceX87();
 FEXCore::IR::Pass* CreateLowerX87();
 FEXCore::IR::Pass* CreateDumpIR(std::string Name, bool WithRa);
 
