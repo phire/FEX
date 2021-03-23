@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace FEXCore::IR {
 class Pass;
 class RegisterAllocationPass;
@@ -14,6 +16,7 @@ FEXCore::IR::Pass* CreatePassDeadCodeElimination();
 FEXCore::IR::Pass* CreateIRCompaction();
 FEXCore::IR::RegisterAllocationPass* CreateRegisterAllocationPass(FEXCore::IR::Pass* CompactionPass, bool OptimizeSRA);
 FEXCore::IR::Pass* CreateStaticRegisterAllocationPass();
+FEXCore::IR::Pass* CreateDumpIR(std::string Name, bool WithRa);
 
 namespace Validation {
 FEXCore::IR::Pass* CreateIRValidation();
