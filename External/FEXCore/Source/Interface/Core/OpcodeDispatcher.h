@@ -359,6 +359,8 @@ public:
     RES_STI,
   };
   template<size_t width, bool Integer, OpResult ResInST0>
+  void FCommon(OpcodeArgs, std::function<OrderedNode* (OrderedNode* a, OrderedNode* b)> Fn);
+  template<size_t width, bool Integer, OpResult ResInST0>
   void FADD(OpcodeArgs);
   template<size_t width, bool Integer, OpResult ResInST0>
   void FMUL(OpcodeArgs);

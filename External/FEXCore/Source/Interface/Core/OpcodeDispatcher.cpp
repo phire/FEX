@@ -1921,7 +1921,7 @@ void OpDispatchBuilder::ASHRImmediateOp(OpcodeArgs) {
   if (Size < 32) {
     Dest = _Sbfe(Size, 0, Dest);
   }
-  
+
   OrderedNode *Src = _Constant(Size, Shift);
   OrderedNode *Result = _Ashr(Dest, Src);
 
@@ -4397,7 +4397,7 @@ void OpDispatchBuilder::CMPXCHGOp(OpcodeArgs) {
   }
   else {
     HandledLock = Op->Flags & FEXCore::X86Tables::DecodeFlags::FLAG_LOCK;
-    
+
     OrderedNode *Src3{};
     OrderedNode *Src3Lower{};
     if (GPRSize == 8 && Size == 4) {
@@ -6413,22 +6413,8 @@ void OpDispatchBuilder::VFCMPOp(OpcodeArgs) {
   StoreResult(FPRClass, Op, Result, -1);
 }
 
-OrderedNode *OpDispatchBuilder::GetX87Top() {
-  // Yes, we are storing 3 bits in a single flag register.
-  // Deal with it
-  return _LoadContext(1, offsetof(FEXCore::Core::CPUState, flags) + FEXCore::X86State::X87FLAG_TOP_LOC, GPRClass);
-}
-
-void OpDispatchBuilder::SetX87Top(OrderedNode *Value) {
-  _StoreContext(GPRClass, 1, offsetof(FEXCore::Core::CPUState, flags) + FEXCore::X86State::X87FLAG_TOP_LOC, Value);
-}
-
 template<size_t width>
 void OpDispatchBuilder::FLD(OpcodeArgs) {
-
-  // Update TOP
-  auto orig_top = GetX87Top();
-  auto mask = _Constant(7);
 
   size_t read_width = (width == 80) ? 16 : width / 8;
 
@@ -6440,9 +6426,7 @@ void OpDispatchBuilder::FLD(OpcodeArgs) {
   }
   else {
     // Implicit arg
-    auto offset = _Constant(Op->OP & 7);
-    data = _And(_Add(orig_top, offset), mask);
-    data = _LoadContextIndexed(data, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+    data = _X87StackLoad(Op->OP & 7);
   }
   OrderedNode *converted = data;
 
@@ -6451,61 +6435,49 @@ void OpDispatchBuilder::FLD(OpcodeArgs) {
       converted = _F80CVTTo(data, width / 8);
   }
 
-  auto top = _And(_Sub(orig_top, _Constant(1)), mask);
-  SetX87Top(top);
+  _X87AdjustTop(-1);
+
   // Write to ST[TOP]
-  _StoreContextIndexed(converted, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  //_StoreContext(converted, 16, offsetof(FEXCore::Core::CPUState, mm[7][0]));
+  _X87StackStore(converted, 0);
 }
 
 void OpDispatchBuilder::FBLD(OpcodeArgs) {
 
   // Update TOP
-  auto orig_top = GetX87Top();
-  auto mask = _Constant(7);
-  auto top = _And(_Sub(orig_top, _Constant(1)), mask);
-  SetX87Top(top);
+  _X87AdjustTop(-1);
 
   // Read from memory
   OrderedNode *data = LoadSource_WithOpSize(FPRClass, Op, Op->Src[0], 16, Op->Flags, -1);
   OrderedNode *converted = _F80BCDLoad(data);
-  _StoreContextIndexed(converted, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(converted, 0);
 }
 
 void OpDispatchBuilder::FBSTP(OpcodeArgs) {
-
-  auto orig_top = GetX87Top();
-  auto data = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto data = _X87StackLoad(0);
 
   OrderedNode *converted = _F80BCDStore(data);
 
 	StoreResult_WithOpSize(FPRClass, Op, Op->Dest, converted, 10, 1);
-
-	auto top = _And(_Add(orig_top, _Constant(1)), _Constant(7));
-	SetX87Top(top);
+  _X87AdjustTop(1);
 }
 
 template<uint64_t Lower, uint32_t Upper>
 void OpDispatchBuilder::FLD_Const(OpcodeArgs) {
   // Update TOP
-  auto orig_top = GetX87Top();
-  auto top = _And(_Sub(orig_top, _Constant(1)), _Constant(7));
-  SetX87Top(top);
+  _X87AdjustTop(-1);
 
   auto low = _Constant(Lower);
   auto high = _Constant(Upper);
   OrderedNode *data = _VCastFromGPR(16, 8, low);
   data = _VInsGPR(16, 8, data, high, 1);
   // Write to ST[TOP]
-  _StoreContextIndexed(data, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(data, 0);
 }
 
 void OpDispatchBuilder::FILD(OpcodeArgs) {
 
   // Update TOP
-  auto orig_top = GetX87Top();
-  auto top = _And(_Sub(orig_top, _Constant(1)), _Constant(7));
-  SetX87Top(top);
+  _X87AdjustTop(-1);
 
   size_t read_width = GetSrcSize(Op);
 
@@ -6535,14 +6507,13 @@ void OpDispatchBuilder::FILD(OpcodeArgs) {
   converted = _VInsElement(16, 8, 1, 0, converted, _VCastFromGPR(16, 8, upper));
 
   // Write to ST[TOP]
-  _StoreContextIndexed(converted, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(converted, 0);
 }
 
 template<size_t width>
 void OpDispatchBuilder::FST(OpcodeArgs) {
 
-  auto orig_top = GetX87Top();
-  auto data = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto data = _X87StackLoad(0);
   if (width == 80) {
     StoreResult_WithOpSize(FPRClass, Op, Op->Dest, data, 10, 1);
   }
@@ -6552,8 +6523,7 @@ void OpDispatchBuilder::FST(OpcodeArgs) {
   }
 
   if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    auto top = _And(_Add(orig_top, _Constant(1)), _Constant(7));
-    SetX87Top(top);
+    _X87AdjustTop(1);
   }
 }
 
@@ -6562,28 +6532,22 @@ void OpDispatchBuilder::FIST(OpcodeArgs) {
 
   auto Size = GetSrcSize(Op);
 
-  auto orig_top = GetX87Top();
-  OrderedNode *data = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  OrderedNode *data = _X87StackLoad(0);
   data = _F80CVTInt(data, Truncate, Size);
 
   StoreResult_WithOpSize(GPRClass, Op, Op->Dest, data, Size, 1);
 
   if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    auto top = _And(_Add(orig_top, _Constant(1)), _Constant(7));
-    SetX87Top(top);
+    _X87AdjustTop(1);
   }
 }
 
 template <size_t width, bool Integer, OpDispatchBuilder::OpResult ResInST0>
-void OpDispatchBuilder::FADD(OpcodeArgs) {
-
-  auto top = GetX87Top();
-  OrderedNode *StackLocation = top;
+void OpDispatchBuilder::FCommon(OpcodeArgs, std::function<OrderedNode* (OrderedNode* a, OrderedNode* b)> Fn) {
+  int StoreOffset = 0;
 
   OrderedNode *arg{};
   OrderedNode *b{};
-
-  auto mask = _Constant(7);
 
   if (Op->Src[0].TypeNone.Type != 0) {
     // Memory arg
@@ -6599,182 +6563,65 @@ void OpDispatchBuilder::FADD(OpcodeArgs) {
     }
   } else {
     // Implicit arg
-    auto offset = _Constant(Op->OP & 7);
-    arg = _And(_Add(top, offset), mask);
     if (ResInST0 == OpResult::RES_STI) {
-      StackLocation = arg;
+      StoreOffset = Op->OP & 7;
     }
-    b = _LoadContextIndexed(arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+    b = _X87StackLoad(Op->OP & 7);
   }
 
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  auto result = _F80Add(a, b);
+  auto a = _X87StackLoad(0);
+  auto result = Fn(a, b);
 
   if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    top = _And(_Add(top, _Constant(1)), mask);
-    SetX87Top(top);
+    _X87AdjustTop(1);
+    StoreOffset--;
   }
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, StackLocation, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, StoreOffset);
+}
+
+template <size_t width, bool Integer, OpDispatchBuilder::OpResult ResInST0>
+void OpDispatchBuilder::FADD(OpcodeArgs) {
+  FCommon<width, Integer, ResInST0>(Op, [this] (OrderedNode* a, OrderedNode* b) {
+    return _F80Add(a, b);
+  });
 }
 
 template<size_t width, bool Integer, OpDispatchBuilder::OpResult ResInST0>
 void OpDispatchBuilder::FMUL(OpcodeArgs) {
-
-  auto top = GetX87Top();
-  OrderedNode *StackLocation = top;
-  OrderedNode *arg{};
-  OrderedNode *b{};
-
-  auto mask = _Constant(7);
-
-  if (Op->Src[0].TypeNone.Type != 0) {
-    // Memory arg
-
-    if (width == 16 || width == 32 || width == 64) {
-      if (Integer) {
-        arg = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
-        b = _F80CVTToInt(arg, width / 8);
-      }
-      else {
-        arg = LoadSource(FPRClass, Op, Op->Src[0], Op->Flags, -1);
-        b = _F80CVTTo(arg, width / 8);
-      }
-    }
-  } else {
-    // Implicit arg
-    auto offset = _Constant(Op->OP & 7);
-    arg = _And(_Add(top, offset), mask);
-    if (ResInST0 == OpResult::RES_STI) {
-      StackLocation = arg;
-    }
-
-    b = _LoadContextIndexed(arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  }
-
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-
-  auto result = _F80Mul(a, b);
-
-  if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    top = _And(_Add(top, _Constant(1)), mask);
-    SetX87Top(top);
-  }
-
-  // Write to ST[TOP]
-  _StoreContextIndexed(result, StackLocation, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  FCommon<width, Integer, ResInST0>(Op, [this] (OrderedNode* a, OrderedNode* b) {
+    return _F80Mul(a, b);
+  });
 }
 
 template<size_t width, bool Integer, bool reverse, OpDispatchBuilder::OpResult ResInST0>
 void OpDispatchBuilder::FDIV(OpcodeArgs) {
-
-  auto top = GetX87Top();
-  OrderedNode *StackLocation = top;
-  OrderedNode *arg{};
-  OrderedNode *b{};
-
-  auto mask = _Constant(7);
-
-  if (Op->Src[0].TypeNone.Type != 0) {
-    // Memory arg
-
-    if (width == 16 || width == 32 || width == 64) {
-      if (Integer) {
-        arg = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
-        b = _F80CVTToInt(arg, width / 8);
-      }
-      else {
-        arg = LoadSource(FPRClass, Op, Op->Src[0], Op->Flags, -1);
-        b = _F80CVTTo(arg, width / 8);
-      }
+  FCommon<width, Integer, ResInST0>(Op, [this] (OrderedNode* a, OrderedNode* b) {
+    if (reverse) {
+      return _F80Div(b, a);
     }
-  } else {
-    // Implicit arg
-    auto offset = _Constant(Op->OP & 7);
-    arg = _And(_Add(top, offset), mask);
-    if (ResInST0 == OpResult::RES_STI) {
-      StackLocation = arg;
+    else {
+      return _F80Div(a, b);
     }
-
-    b = _LoadContextIndexed(arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  }
-
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-
-  OrderedNode *result{};
-  if (reverse) {
-    result = _F80Div(b, a);
-  }
-  else {
-    result = _F80Div(a, b);
-  }
-
-  if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    top = _And(_Add(top, _Constant(1)), mask);
-    SetX87Top(top);
-  }
-
-  // Write to ST[TOP]
-  _StoreContextIndexed(result, StackLocation, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  });
 }
 
 template<size_t width, bool Integer, bool reverse, OpDispatchBuilder::OpResult ResInST0>
 void OpDispatchBuilder::FSUB(OpcodeArgs) {
-
-  auto top = GetX87Top();
-  OrderedNode *StackLocation = top;
-  OrderedNode *arg{};
-  OrderedNode *b{};
-
-  auto mask = _Constant(7);
-
-  if (Op->Src[0].TypeNone.Type != 0) {
-    // Memory arg
-
-    if (width == 16 || width == 32 || width == 64) {
-      if (Integer) {
-        arg = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
-        b = _F80CVTToInt(arg, width / 8);
-      }
-      else {
-        arg = LoadSource(FPRClass, Op, Op->Src[0], Op->Flags, -1);
-        b = _F80CVTTo(arg, width / 8);
-      }
+  FCommon<width, Integer, ResInST0>(Op, [this] (OrderedNode* a, OrderedNode* b) {
+    if (reverse) {
+      return _F80Sub(b, a);
     }
-  } else {
-    // Implicit arg
-    auto offset = _Constant(Op->OP & 7);
-    arg = _And(_Add(top, offset), mask);
-    if (ResInST0 == OpResult::RES_STI) {
-      StackLocation = arg;
+    else {
+      return _F80Sub(a, b);
     }
-    b = _LoadContextIndexed(arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  }
-
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-
-  OrderedNode *result{};
-  if (reverse) {
-    result = _F80Sub(b, a);
-  }
-  else {
-    result = _F80Sub(a, b);
-  }
-
-  if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    top = _And(_Add(top, _Constant(1)), mask);
-    SetX87Top(top);
-  }
-
-  // Write to ST[TOP]
-  _StoreContextIndexed(result, StackLocation, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  });
 }
 
 void OpDispatchBuilder::FCHS(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
 
   auto low = _Constant(0);
   auto high = _Constant(0b1'000'0000'0000'0000);
@@ -6784,13 +6631,12 @@ void OpDispatchBuilder::FCHS(OpcodeArgs) {
   auto result = _VXor(a, data, 16, 1);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 0);
 }
 
 void OpDispatchBuilder::FABS(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
 
   auto low = _Constant(~0ULL);
   auto high = _Constant(0b0'111'1111'1111'1111);
@@ -6800,13 +6646,12 @@ void OpDispatchBuilder::FABS(OpcodeArgs) {
   auto result = _VAnd(a, data, 16, 1);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 0);
 }
 
 void OpDispatchBuilder::FTST(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
 
   auto low = _Constant(0);
   OrderedNode *data = _VCastFromGPR(16, 8, low);
@@ -6830,29 +6675,25 @@ void OpDispatchBuilder::FTST(OpcodeArgs) {
 
 void OpDispatchBuilder::FRNDINT(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
 
   auto result = _F80Round(a);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 0);
 }
 
 void OpDispatchBuilder::FXTRACT(OpcodeArgs) {
 
-  auto orig_top = GetX87Top();
-  auto top = _And(_Sub(orig_top, _Constant(1)), _Constant(7));
-  SetX87Top(top);
-
-  auto a = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
+  _X87AdjustTop(-1);
 
   auto exp = _F80XTRACT_EXP(a);
   auto sig = _F80XTRACT_SIG(a);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(exp, orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  _StoreContextIndexed(sig, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(exp, 1);
+  _X87StackStore(sig, 0);
 }
 
 void OpDispatchBuilder::FNINIT(OpcodeArgs) {
@@ -6863,7 +6704,7 @@ void OpDispatchBuilder::FNINIT(OpcodeArgs) {
   _StoreContext(GPRClass, 2, offsetof(FEXCore::Core::CPUState, FCW), NewFCW);
 
   // Init FSW to 0
-  SetX87Top(_Constant(0));
+  _X87SetTop(_Constant(0));
 
   SetRFLAG<FEXCore::X86State::X87FLAG_C0_LOC>(_Constant(0));
   SetRFLAG<FEXCore::X86State::X87FLAG_C1_LOC>(_Constant(0));
@@ -6876,32 +6717,26 @@ void OpDispatchBuilder::FNINIT(OpcodeArgs) {
 template<size_t width, bool Integer, OpDispatchBuilder::FCOMIFlags whichflags, bool poptwice>
 void OpDispatchBuilder::FCOMI(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  auto mask = _Constant(7);
-
-  OrderedNode *arg{};
   OrderedNode *b{};
 
   if (Op->Src[0].TypeNone.Type != 0) {
     // Memory arg
     if (width == 16 || width == 32 || width == 64) {
       if (Integer) {
-        arg = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
+        auto arg = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
         b = _F80CVTToInt(arg, width / 8);
       }
       else {
-        arg = LoadSource(FPRClass, Op, Op->Src[0], Op->Flags, -1);
+        auto arg = LoadSource(FPRClass, Op, Op->Src[0], Op->Flags, -1);
         b = _F80CVTTo(arg, width / 8);
       }
     }
   } else {
     // Implicit arg
-    auto offset = _Constant(Op->OP & 7);
-    arg = _And(_Add(top, offset), mask);
-    b = _LoadContextIndexed(arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+    b = _X87StackLoad(Op->OP & 7);
   }
 
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
 
   OrderedNode *Res = _F80Cmp(a, b,
     (1 << FCMP_FLAG_EQ) |
@@ -6928,79 +6763,52 @@ void OpDispatchBuilder::FCOMI(OpcodeArgs) {
 
 
   if (poptwice) {
-    top = _And(_Add(top, _Constant(2)), mask);
-    SetX87Top(top);
+    _X87AdjustTop(2);
   }
   else if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    top = _And(_Add(top, _Constant(1)), mask);
-    SetX87Top(top);
+    _X87AdjustTop(1);
   }
 }
 
 void OpDispatchBuilder::FXCH(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  OrderedNode* arg;
-
-  auto mask = _Constant(7);
-
-  // Implicit arg
-  auto offset = _Constant(Op->OP & 7);
-  arg = _And(_Add(top, offset), mask);
-
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  auto b = _LoadContextIndexed(arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
+  auto b = _X87StackLoad(Op->OP & 7);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(b, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  _StoreContextIndexed(a, arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(b, 0);
+  _X87StackStore(a, Op->OP & 7);
 }
 
 void OpDispatchBuilder::FST(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  OrderedNode* arg;
-
-  auto mask = _Constant(7);
-
-  // Implicit arg
-  auto offset = _Constant(Op->OP & 7);
-  arg = _And(_Add(top, offset), mask);
-
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(a, arg, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(a, Op->OP & 7);
 
   if ((Op->TableInfo->Flags & X86Tables::InstFlags::FLAGS_POP) != 0) {
-    top = _And(_Add(top, _Constant(1)), _Constant(7));
-    SetX87Top(top);
+    _X87AdjustTop(1);
   }
 }
 
 template<FEXCore::IR::IROps IROp>
 void OpDispatchBuilder::X87UnaryOp(OpcodeArgs) {
 
-  auto top = GetX87Top();
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
 
   auto result = _F80Round(a);
   // Overwrite the op
   result.first->Header.Op = IROp;
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 0);
 }
 
 template<FEXCore::IR::IROps IROp>
 void OpDispatchBuilder::X87BinaryOp(OpcodeArgs) {
-  auto top = GetX87Top();
-
-  auto mask = _Constant(7);
-  OrderedNode *st1 = _And(_Add(top, _Constant(1)), mask);
-
-  auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  st1 = _LoadContextIndexed(st1, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(0);
+  auto st1 = _X87StackLoad(1);
 
   auto result = _F80Add(a, st1);
   // Overwrite the op
@@ -7012,47 +6820,35 @@ void OpDispatchBuilder::X87BinaryOp(OpcodeArgs) {
   }
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 0);
 }
 
 template<bool Inc>
 void OpDispatchBuilder::X87ModifySTP(OpcodeArgs) {
-  auto orig_top = GetX87Top();
-  if (Inc) {
-    auto top = _And(_Add(orig_top, _Constant(1)), _Constant(7));
-    SetX87Top(top);
-  }
-  else {
-    auto top = _And(_Sub(orig_top, _Constant(1)), _Constant(7));
-    SetX87Top(top);
-  }
+  _X87AdjustTop(Inc ? 1 : -1);
 }
 
 void OpDispatchBuilder::X87SinCos(OpcodeArgs) {
 
-  auto orig_top = GetX87Top();
-  auto top = _And(_Sub(orig_top, _Constant(1)), _Constant(7));
-  SetX87Top(top);
+  _X87AdjustTop(-1);
 
-  auto a = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(1);
 
   auto sin = _F80SIN(a);
   auto cos = _F80COS(a);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(sin, orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  _StoreContextIndexed(cos, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(sin, 1);
+  _X87StackStore(cos, 0);
 }
 
 void OpDispatchBuilder::X87FYL2X(OpcodeArgs) {
   bool Plus1 = Op->OP == 0x01F9; // FYL2XP
 
-  auto orig_top = GetX87Top();
-  auto top = _And(_Add(orig_top, _Constant(1)), _Constant(7));
-  SetX87Top(top);
+  _X87AdjustTop(1);
 
-  OrderedNode *st0 = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  OrderedNode *st1 = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  OrderedNode *st0 = _X87StackLoad(-1);
+  OrderedNode *st1 = _X87StackLoad(0);
 
   if (Plus1) {
     auto low = _Constant(0x8000'0000'0000'0000);
@@ -7065,16 +6861,14 @@ void OpDispatchBuilder::X87FYL2X(OpcodeArgs) {
   auto result = _F80FYL2X(st0, st1);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 0);
 }
 
 void OpDispatchBuilder::X87TAN(OpcodeArgs) {
 
-  auto orig_top = GetX87Top();
-  auto top = _And(_Sub(orig_top, _Constant(1)), _Constant(7));
-  SetX87Top(top);
+  _X87AdjustTop(-1);
 
-  auto a = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(1);
 
   auto result = _F80TAN(a);
 
@@ -7084,23 +6878,21 @@ void OpDispatchBuilder::X87TAN(OpcodeArgs) {
   data = _VInsGPR(16, 8, data, high, 1);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  _StoreContextIndexed(data, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 1);
+  _X87StackStore(data, 0);
 }
 
 void OpDispatchBuilder::X87ATAN(OpcodeArgs) {
 
-  auto orig_top = GetX87Top();
-  auto top = _And(_Add(orig_top, _Constant(1)), _Constant(7));
-  SetX87Top(top);
+  _X87AdjustTop(1);
 
-  auto a = _LoadContextIndexed(orig_top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
-  OrderedNode *st1 = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  auto a = _X87StackLoad(-1);
+  OrderedNode *st1 = _X87StackLoad(0);
 
   auto result = _F80ATAN(st1, a);
 
   // Write to ST[TOP]
-  _StoreContextIndexed(result, top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
+  _X87StackStore(result, 0);
 }
 
 void OpDispatchBuilder::X87LDENV(OpcodeArgs) {
@@ -7117,7 +6909,7 @@ void OpDispatchBuilder::X87LDENV(OpcodeArgs) {
 
   // Strip out the FSW information
   auto Top = _Bfe(3, 11, NewFSW);
-  SetX87Top(Top);
+  _X87SetTop(Top);
 
   auto C0 = _Bfe(1, 8,  NewFSW);
   auto C1 = _Bfe(1, 9,  NewFSW);
@@ -7163,7 +6955,7 @@ void OpDispatchBuilder::X87FNSTENV(OpcodeArgs) {
     OrderedNode *MemLocation = _Add(Mem, _Constant(Size * 1));
 		// We must construct the FSW from our various bits
 		OrderedNode *FSW = _Constant(0);
-		auto Top = GetX87Top();
+		auto Top = _X87GetTop();
 		FSW = _Or(FSW, _Lshl(Top, _Constant(11)));
 
 		auto C0 = GetRFLAG(FEXCore::X86State::X87FLAG_C0_LOC);
@@ -7227,7 +7019,7 @@ void OpDispatchBuilder::X87LDSW(OpcodeArgs) {
   OrderedNode *NewFSW = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
   // Strip out the FSW information
   auto Top = _Bfe(3, 11, NewFSW);
-  SetX87Top(Top);
+  _X87SetTop(Top);
 
   auto C0 = _Bfe(1, 8,  NewFSW);
   auto C1 = _Bfe(1, 9,  NewFSW);
@@ -7243,7 +7035,7 @@ void OpDispatchBuilder::X87LDSW(OpcodeArgs) {
 void OpDispatchBuilder::X87FNSTSW(OpcodeArgs) {
   // We must construct the FSW from our various bits
   OrderedNode *FSW = _Constant(0);
-  auto Top = GetX87Top();
+  auto Top = _X87GetTop();
   FSW = _Or(FSW, _Lshl(Top, _Constant(11)));
 
   auto C0 = GetRFLAG(FEXCore::X86State::X87FLAG_C0_LOC);
@@ -7283,7 +7075,7 @@ void OpDispatchBuilder::X87FNSAVE(OpcodeArgs) {
   OrderedNode *Mem = LoadSource(GPRClass, Op, Op->Dest, Op->Flags, -1, false);
   Mem = AppendSegmentOffset(Mem, Op->Flags);
 
-  OrderedNode *Top = GetX87Top();
+  OrderedNode *Top = _X87GetTop();
 	{
     auto FCW = _LoadContext(2, offsetof(FEXCore::Core::CPUState, FCW), GPRClass);
 		_StoreMem(GPRClass, Size, Mem, FCW, Size);
@@ -7379,7 +7171,7 @@ void OpDispatchBuilder::X87FRSTOR(OpcodeArgs) {
 
   // Strip out the FSW information
   OrderedNode *Top = _Bfe(3, 11, NewFSW);
-  SetX87Top(Top);
+  _X87SetTop(Top);
 
   auto C0 = _Bfe(1, 8,  NewFSW);
   auto C1 = _Bfe(1, 9,  NewFSW);
@@ -7426,7 +7218,7 @@ void OpDispatchBuilder::X87FRSTOR(OpcodeArgs) {
 }
 
 void OpDispatchBuilder::X87FXAM(OpcodeArgs) {
-  auto top = GetX87Top();
+  auto top = _X87GetTop();
   auto a = _LoadContextIndexed(top, 16, offsetof(FEXCore::Core::CPUState, mm[0][0]), 16, FPRClass);
   OrderedNode *Result = _VExtractToGPR(16, 8, a, 1);
 
@@ -7517,7 +7309,7 @@ void OpDispatchBuilder::X87FCMOV(OpcodeArgs) {
   OrderedNode *VecCond = _VCastFromGPR(16, 8, SrcCond);
   VecCond = _VInsGPR(16, 8, VecCond, SrcCond, 1);
 
-  auto top = GetX87Top();
+  auto top = _X87GetTop();
   OrderedNode* arg;
 
   auto mask = _Constant(7);
@@ -7562,7 +7354,7 @@ void OpDispatchBuilder::FXSaveOp(OpcodeArgs) {
     // We must construct the FSW from our various bits
     OrderedNode *MemLocation = _Add(Mem, _Constant(2));
     OrderedNode *FSW = _Constant(0);
-    auto Top = GetX87Top();
+    auto Top = _X87GetTop();
     FSW = _Or(FSW, _Lshl(Top, _Constant(11)));
 
     auto C0 = GetRFLAG(FEXCore::X86State::X87FLAG_C0_LOC);
@@ -7638,7 +7430,7 @@ void OpDispatchBuilder::FXSaveOp(OpcodeArgs) {
 void OpDispatchBuilder::FXRStoreOp(OpcodeArgs) {
   OrderedNode *Mem = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1, false);
   Mem = AppendSegmentOffset(Mem, Op->Flags);
-  
+
   auto NewFCW = _LoadMem(GPRClass, 2, Mem, 2);
   _F80LoadFCW(NewFCW);
   _StoreContext(GPRClass, 2, offsetof(FEXCore::Core::CPUState, FCW), NewFCW);
@@ -7649,7 +7441,7 @@ void OpDispatchBuilder::FXRStoreOp(OpcodeArgs) {
 
     // Strip out the FSW information
     auto Top = _Bfe(3, 11, NewFSW);
-    SetX87Top(Top);
+    _X87SetTop(Top);
 
     auto C0 = _Bfe(1, 8,  NewFSW);
     auto C1 = _Bfe(1, 9,  NewFSW);

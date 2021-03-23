@@ -3658,6 +3658,72 @@
       ]
     },
 
+    "X87StackLoad": {
+      "Desc": [
+        "Loads an F80 value off the x87 stack relative to the top register.",
+        "Needs to be lowered to real ir ops"
+      ],
+      "OpClass": "Vector",
+      "HasDest": true,
+      "DestClass": "FPR",
+      "DestSize": 16,
+      "NumElements": "1",
+      "Args": [
+        "int8_t", "OffsetFromTop"
+      ]
+    },
+
+    "X87StackStore": {
+      "Desc": [
+        "Stores an F80 value to the x87 stack relative to the top register.",
+        "Needs to be lowered to real ir ops"
+      ],
+      "OpClass": "Vector",
+      "HasSideEffects": true,
+      "SSAArgs": "1",
+      "SSANames": [
+        "Value"
+      ],
+      "Args": [
+        "int8_t", "OffsetFromTop"
+      ]
+    },
+
+    "X87AdjustTop": {
+      "Desc": [
+        "Ajusts the x87 top register, adding the offset.",
+        "Needs to be lowered to real ir ops"
+      ],
+      "OpClass": "Misc",
+      "HasSideEffects": true,
+      "Args": [
+        "int8_t", "Offset"
+      ]
+    },
+
+    "X87SetTop": {
+      "Desc": [
+        "Sets the x87 top register to a fixed value.",
+        "Needs to be lowered to real ir ops"
+      ],
+      "OpClass": "Misc",
+      "HasSideEffects": true,
+      "SSAArgs": "1",
+      "SSANames": [
+        "Top"
+      ]
+    },
+
+    "X87GetTop": {
+      "Desc": [
+        "Grabs the x87 top register.",
+        "Needs to be lowered to real ir ops"
+      ],
+      "OpClass": "Misc",
+      "HasDest": true,
+      "DestClass": "GPR"
+    },
+
     "Last": {
       "Last": true,
       "Args": []
