@@ -59,7 +59,7 @@ Arm64Dispatcher::Arm64Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::
   // Create a fake stackframe with our dispatcher exit
   // This is mostly so dwarf unwinding can find it
   ldr(x30, &l_DispatcherExitReturn);
-  stp(x29, x30, MemOperand(sp, -16, PreIndex));
+  stp(x30, x0, MemOperand(sp, -16, PreIndex));
 
   // Save this stack pointer so we can cleanly shutdown the emulation with a long jump
   // regardless of where we were in the stack
@@ -190,7 +190,7 @@ Arm64Dispatcher::Arm64Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::
 
     ThreadStopHandlerAddress = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
 
-    ldp(x29, x30, MemOperand(sp, 16, PostIndex));
+    ldp(x30, x0, MemOperand(sp, 16, PostIndex));
 
     // Return from the function
     // LR is set to the correct return location now

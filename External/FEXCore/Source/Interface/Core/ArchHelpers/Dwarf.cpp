@@ -59,6 +59,12 @@ DwarfFrame::~DwarfFrame() {
     __deregister_frame(DwarfData.data() + FdeOffset);
 }
 
+#ifdef _M_X86_64
+static constexpr int RA_REG = 16;
+#endif
+#ifdef _M_ARM_64
+static constexpr int RA_REG = 30;
+#endif
 
 void DwarfFrame::EmitDwarfForCodeBuffer(CodeBuffer *Buffer) {
   // Various emitters
@@ -153,19 +159,8 @@ void DwarfFrame::EmitDwarfForCodeBuffer(CodeBuffer *Buffer) {
       // That's all we really need. Once the unwinder has found the return address
       // it can continue up the stack and interrogate more call frames
 
-      // Most call frames contain callee saved registers
-      // But our special fake callframe doesn't, they are actually stored one frame higher
-      // So mark them as undefined
-      emit_byte(DW_CFA_undefined); emit_uLEB128(15);
-      emit_byte(DW_CFA_undefined); emit_uLEB128(14);
-      emit_byte(DW_CFA_undefined); emit_uLEB128(13);
-      emit_byte(DW_CFA_undefined); emit_uLEB128(12);
-      emit_byte(DW_CFA_undefined); emit_uLEB128(6);
-      emit_byte(DW_CFA_undefined); emit_uLEB128(3);
-
-
       // Return address can be found at CFE+0
-      emit_byte(DW_CFA_offset(16)); emit_uLEB128(0);
+      emit_byte(DW_CFA_offset(RA_REG)); emit_uLEB128(0);
 
       // Advance the program counter to the end of the code buffer so everything above
       // will apply to the whole codebuffer
