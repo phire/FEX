@@ -61,9 +61,11 @@ DwarfFrame::~DwarfFrame() {
 
 #ifdef _M_X86_64
 static constexpr int RA_REG = 16;
+static constexpr int CODE_ALIGN = 1;
 #endif
 #ifdef _M_ARM_64
 static constexpr int RA_REG = 30;
+static constexpr int CODE_ALIGN = 4;
 #endif
 
 void DwarfFrame::EmitDwarfForCodeBuffer(CodeBuffer *Buffer) {
@@ -111,9 +113,9 @@ void DwarfFrame::EmitDwarfForCodeBuffer(CodeBuffer *Buffer) {
   emit_word(0x0); // CIE_ID
   emit_byte(1); // CIE_VERSION
   emit_string("zR"); // augmentation tags (see augmentation data below)
-  emit_uLEB128(1); // Code alignment factor
+  emit_uLEB128(CODE_ALIGN); // Code alignment factor
   emit_sLEB128(-8); // Data alignment factor
-  emit_byte(16); // Return address register
+  emit_byte(RA_REG); // Return address register
       // Augmentation data
       emit_uLEB128(1); // z = length
       emit_byte(0x04); // R = DW_EH_PE_absptr | DW_EH_PE_udata8; Pointers are 8 byte absolute
