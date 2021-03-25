@@ -3,7 +3,7 @@
 #include "Interface/Core/ArchHelpers/Dwarf.h"
 
 #include <stdint.h>
-
+#include <utility>
 
 namespace FEXCore::CPU {
 class CodeBuffer {
@@ -14,14 +14,22 @@ public:
   uint8_t *Ptr{};
   size_t Size{};
 
-  CodeBuffer(CodeBuffer&& ) noexcept = default;
-  CodeBuffer& operator=(CodeBuffer &&) noexcept = default;
+  CodeBuffer(CodeBuffer&& other) noexcept {
+    *this = std::move(other);
+  }
 
-  CodeBuffer( const FEXCore::CPU::CodeBuffer& ) = delete; // non construction-copyable
-  CodeBuffer& operator=( const FEXCore::CPU::CodeBuffer& ) = delete; // non copyable
+  CodeBuffer& operator=(CodeBuffer&& other) noexcept {
+    if (&other == this)
+      return *this;
+
+    Ptr = std::exchange(other.Ptr, nullptr); // Clear Ptr so destructor does nothing
+    Size = other.Size;
+    Dwarf = std::move(other.Dwarf);
+
+    return *this;
+  }
 
 private:
-
   DwarfFrame Dwarf;
 };
 
